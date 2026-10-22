@@ -9,9 +9,9 @@ all: lxc-dashboard
 lxc-dashboard: src/main.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
-debug: CFLAGS = -O1 -g -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer
-debug: LDFLAGS = -fsanitize=address,undefined
-debug: clean lxc-dashboard
+debug:
+	$(MAKE) clean
+	$(MAKE) CFLAGS="-O1 -g -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer" LDFLAGS="-fsanitize=address,undefined" lxc-dashboard
 
 clean:
 	rm -f lxc-dashboard

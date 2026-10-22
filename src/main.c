@@ -19,7 +19,6 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
-#include <poll.h>
 #define REQ_MAX 16384
 #define NAME_MAX_SAFE 64
 #define SESSIONS 128
@@ -134,13 +133,13 @@ static void reply(int fd,int code,const char *status,const char *type,const char
     char head[1024];
     size_t n=strlen(body);
     int k=snprintf(head,sizeof head,"HTTP/1.1 %d %s\r\n"
-            "Content-Type: %s\r\n"
-            "Content-Length: %zu\r\n"
-            "Connection: close\r\n"
-            "X-Content-Type-Options: nosniff\r\n"
-            "X-Frame-Options: DENY\r\n"
-            "Cache-Control: no-store\r\n"
-            "%s\r\n",code,status,type,n,extra?extra:"");
+    "Content-Type: %s\r\n"
+    "Content-Length: %zu\r\n"
+    "Connection: close\r\n"
+    "X-Content-Type-Options: nosniff\r\n"
+    "X-Frame-Options: DENY\r\n"
+    "Cache-Control: no-store\r\n"
+    "%s\r\n",code,status,type,n,extra?extra:"");
     if(k>0 && (size_t)k<sizeof head) {
         (void)send(fd,head,(size_t)k,MSG_NOSIGNAL);
         (void)send(fd,body,n,MSG_NOSIGNAL);
@@ -291,7 +290,7 @@ static void handle(int fd) {
         used+=(size_t)n;
         req[used]=0;
         if(strstr(req,"\r\n"
-            "\r\n"))break;
+        "\r\n"))break;
     }
     if(!used) return;
     req[used]=0;
@@ -301,7 +300,7 @@ static void handle(int fd) {
         return;
     }
     char *hend=strstr(req,"\r\n"
-            "\r\n");
+    "\r\n");
     if(!hend) {
         json_error(fd,400,"headers too large");
         return;
@@ -360,33 +359,33 @@ static void handle(int fd) {
     if(strcmp(path,"/")==0 && strcmp(method,"GET")==0) {
         if(token_ok(tok)) {
             const char *page="<!doctype html>\n"
-            "<html lang=\\"en\\">\n"
+            "<html lang=\"en\">\n"
             "<head>\n"
-            "<meta charset=\\"utf-8\\">\n"
-            "<meta name=\\"viewport\\" content=\\"width=device-width, initial-scale=1\\">\n"
+            "<meta charset=\"utf-8\">\n"
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
             "<title>LXC Dashboard</title>\n"
             "</head>\n"
             "<body>\n"
             "<h1>LXC Dashboard</h1>\n"
-            "<p><button type=\\"button\\" id=\\"refresh\\">Refresh containers</button> <button type=\\"button\\" id=\\"logout\\">Log out</button></p>\n"
+            "<p><button type=\"button\" id=\"refresh\">Refresh containers</button> <button type=\"button\" id=\"logout\">Log out</button></p>\n"
             "<h2>Containers</h2>\n"
-            "<ul id=\\"list\\"><li>Loading...</li></ul>\n"
+            "<ul id=\"list\"><li>Loading...</li></ul>\n"
             "<hr>\n"
             "<h2>Selected container</h2>\n"
-            "<p>Name: <span id=\\"selected-name\\">None</span></p>\n"
-            "<p>State: <span id=\\"selected-state\\">-</span></p>\n"
-            "<p>IP address: <span id=\\"selected-ip\\">-</span></p>\n"
-            "<p id=\\"actions\\"></p>\n"
+            "<p>Name: <span id=\"selected-name\">None</span></p>\n"
+            "<p>State: <span id=\"selected-state\">-</span></p>\n"
+            "<p>IP address: <span id=\"selected-ip\">-</span></p>\n"
+            "<p id=\"actions\"></p>\n"
             "<hr>\n"
             "<h2>Create container</h2>\n"
-            "<form id=\\"create-form\\">\n"
-            "<p><label>Name: <input id=\\"newname\\" name=\\"name\\" required></label></p>\n"
-            "<p><label>Distribution: <input id=\\"newdistro\\" name=\\"distro\\" value=\\"gentoo\\" required></label></p>\n"
-            "<p><label>Release: <input id=\\"newrelease\\" name=\\"release\\" value=\\"current\\" required></label></p>\n"
-            "<p><label>Architecture: <input id=\\"newarch\\" name=\\"arch\\" value=\\"amd64\\" required></label></p>\n"
-            "<p><button type=\\"submit\\">Create container</button></p>\n"
+            "<form id=\"create-form\">\n"
+            "<p><label>Name: <input id=\"newname\" name=\"name\" required></label></p>\n"
+            "<p><label>Distribution: <input id=\"newdistro\" name=\"distro\" value=\"gentoo\" required></label></p>\n"
+            "<p><label>Release: <input id=\"newrelease\" name=\"release\" value=\"current\" required></label></p>\n"
+            "<p><label>Architecture: <input id=\"newarch\" name=\"arch\" value=\"amd64\" required></label></p>\n"
+            "<p><button type=\"submit\">Create container</button></p>\n"
             "</form>\n"
-            "<p id=\\"message\\" role=\\"status\\"></p>\n"
+            "<p id=\"message\" role=\"status\"></p>\n"
             "<script>\n"
             "let selected = null;\n"
             "const byId = id => document.getElementById(id);\n"
@@ -473,19 +472,19 @@ static void handle(int fd) {
             reply(fd,200,"OK","text/html; charset=utf-8",page,NULL);
         } else {
             const char *login="<!doctype html>\n"
-            "<html lang=\\"en\\">\n"
+            "<html lang=\"en\">\n"
             "<head>\n"
-            "<meta charset=\\"utf-8\\">\n"
-            "<meta name=\\"viewport\\" content=\\"width=device-width, initial-scale=1\\">\n"
+            "<meta charset=\"utf-8\">\n"
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
             "<title>LXC Login</title>\n"
             "</head>\n"
             "<body>\n"
             "<h1>LXC Dashboard Login</h1>\n"
-            "<form id=\\"login-form\\">\n"
-            "<p><label>Username: <input name=\\"username\\" autocomplete=\\"username\\" required></label></p>\n"
-            "<p><label>Password: <input name=\\"password\\" type=\\"password\\" autocomplete=\\"current-password\\" required></label></p>\n"
-            "<p><button type=\\"submit\\">Log in</button></p>\n"
-            "<p id=\\"error\\" role=\\"alert\\"></p>\n"
+            "<form id=\"login-form\">\n"
+            "<p><label>Username: <input name=\"username\" autocomplete=\"username\" required></label></p>\n"
+            "<p><label>Password: <input name=\"password\" type=\"password\" autocomplete=\"current-password\" required></label></p>\n"
+            "<p><button type=\"submit\">Log in</button></p>\n"
+            "<p id=\"error\" role=\"alert\"></p>\n"
             "</form>\n"
             "<script>\n"
             "document.getElementById('login-form').addEventListener('submit', async event => {\n"
@@ -715,31 +714,17 @@ int main(int argc,char **argv) {
         return 1;
     }
     fprintf(stderr,"lxc-dashboard listening on %s:%d\n",bind_addr,listen_port);
-    fprintf(stderr, "Press Ctrl+C to quit\n");
     while(!stopping) {
-        struct pollfd pfd= {
-            .fd=s,.events=POLLIN
-        };
-        int r=poll(&pfd,1,1000);
-        /* returns on signal or after 1s */
-        if(r<0) {
-            if(errno==EINTR)continue;
-            /* Ctrl+C lands here; loop re-checks stopping */
-            perror("poll");
-            break;
-        }
-        if(r==0)continue;
-        /* timeout: just re-check stopping */
         int c=accept4(s,NULL,NULL,SOCK_CLOEXEC);
         if(c<0) {
-            if(errno==EINTR||errno==EAGAIN)continue;
+            if(errno==EINTR)continue;
+            if(stopping)break;
             perror("accept");
             continue;
         }
         handle(c);
         close(c);
     }
-    fprintf(stderr,"shutting down\n");
     close(s);
     return 0;
 }

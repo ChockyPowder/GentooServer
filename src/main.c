@@ -19,6 +19,7 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+#include <poll.h>
 
 #define REQ_MAX 16384
 #define NAME_MAX_SAFE 64

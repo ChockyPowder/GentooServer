@@ -1,64 +1,74 @@
 # Gentoo LXC Dashboard
 
-A small C11 web dashboard for managing Linux LXC containers on Gentoo/OpenRC. It is intentionally LAN-only and has no Node/Python runtime dependency.
+A small C11, self-hosted web UI for LXC containers on Gentoo/OpenRC. No Python, Node.js, systemd, or external frontend runtime is required.
 
-## Current implementation scope
+> **Status: early MVP, not the full requested feature set yet.** The current code implements login/session handling, container discovery/status, basic lifecycle actions, and a minimal responsive UI. It does not yet implement the requested PTY/WebSocket terminal, streamed template-download progress, cgroup/network time-series graphs, log viewer, host overview, or non-blocking job queue. Do not treat this as production-ready until those are completed and the source has been built/tested on the target host.
 
-The initial implementation is a compact HTTP server with password login, server-side expiring sessions, strict container-name validation, container listing/status, and argv-only lifecycle commands. It serves the UI from a compiled-in asset header. This is a foundation, not yet the complete feature set described in the project request: interactive WebSocket/PTTY terminal, streamed download-template progress, detailed cgroup/network graphs, and full host overview are not implemented yet.
-
-## Build (Gentoo)
+## Build on Gentoo
 
 ```sh
-emerge --ask sys-apps/lxc sys-libs/libxcrypt
+emerge --ask app-containers/lxc sys-libs/libxcrypt
 make
-install -Dm0755 lxc-dashboard /usr/local/bin/lxc-dashboard
-install -Dm0644 lxc-dashboard.init /etc/init.d/lxc-dashboard
+make debug
 ```
 
-The build uses only libc and libcrypt; the server does not need a framework or runtime. Run `make debug` for an ASan/UBSan build.
+The normal build uses libc and libxcrypt. `make debug` builds with AddressSanitizer and UndefinedBehaviorSanitizer. The dashboard source is in `src/main.c`; the HTML/CSS/JS is compiled into the C binary as a string literal.
 
-## Credentials and run
-
-Create a credential file (mode 0600) with a username and a yescrypt password hash:
+Install:
 
 ```sh
-install -d -m 0700 /etc/lxc-dashboard
+install -Dm0755 lxc-dashboard /usr/local/bin/lxc-dashboard
+install -Dm0644 lxc-dashboard.init /etc/init.d/lxc-dashboard
+install -Dm0644 lxc-dashboard.conf /etc/conf.d/lxc-dashboard
+install -d -o root -g root -m 0700 /etc/lxc-dashboard
 /usr/local/bin/lxc-dashboard --set-password /etc/lxc-dashboard/auth
 chown root:root /etc/lxc-dashboard/auth
 chmod 0600 /etc/lxc-dashboard/auth
 ```
 
-Run in the foreground for initial testing:
+The password command prompts interactively and stores a yescrypt hash, not the plaintext password. Use a password of at least 12 characters.
+
+## Run
+
+Foreground smoke test (loopback only):
 
 ```sh
 /usr/local/bin/lxc-dashboard --bind 127.0.0.1 --port 8088 --auth /etc/lxc-dashboard/auth
 ```
 
-Use a private LAN address only if you explicitly configure one, e.g. `--bind 192.168.1.10`. Open `http://SERVER_IP:8088`.
+Open `http://127.0.0.1:8088` on the host, or use an SSH tunnel from your workstation:
 
-## OpenRC
+```sh
+ssh -L 8088:127.0.0.1:8088 user@SERVER_IP
+```
 
-Edit `/etc/conf.d/lxc-dashboard` to set `DASHBOARD_OPTS`, then:
+To expose it on a private LAN, explicitly set a server LAN address in `/etc/conf.d/lxc-dashboard`, then:
 
 ```sh
 rc-update add lxc-dashboard default
 rc-service lxc-dashboard start
+rc-service lxc-dashboard status
 ```
 
-## Security warning
+The default bind is `127.0.0.1`, not `0.0.0.0`.
 
-This application runs privileged LXC management commands. Anyone who can authenticate can control or destroy containers, which is effectively root-level access to the workloads. Keep it on a trusted private network; **do not expose it directly to the internet**. For remote access, use a properly configured TLS reverse proxy/VPN. HTTP on the LAN does not encrypt credentials.
+## Security
+
+This process invokes privileged LXC commands. An authenticated user can control workloads and may effectively gain root-level access to their contents. Keep it on a trusted network. **Never expose it directly to the internet**; use a VPN or a correctly configured TLS reverse proxy for remote access. The built-in server uses plain HTTP, so credentials and session cookies are not encrypted in transit.
+
+The HTTP implementation is intentionally minimal and currently handles requests synchronously. Do not use it as a multi-user or internet-facing service. The terminal/WebSocket path is not implemented in this MVP.
 
 ## Test checklist
 
-- [ ] Log in and verify unauthenticated API requests are rejected.
-- [ ] Confirm existing containers and states are listed.
-- [ ] Start/stop/freeze/unfreeze a disposable container.
-- [ ] Verify invalid container names are rejected.
-- [ ] Verify destroy requires an explicit confirmation in the UI.
-- [ ] Run the ASan/UBSan build and exercise login/actions.
+- [ ] Build with `make` using the target Gentoo toolchain.
+- [ ] Build with `make debug` and exercise login/list/actions.
+- [ ] Verify the auth file is root-owned and mode `0600`.
+- [ ] Verify unauthenticated API requests receive HTTP 401.
+- [ ] Verify container names outside `[A-Za-z0-9][A-Za-z0-9_-]{0,62}` are rejected.
+- [ ] Use a disposable container to test start, stop, freeze, unfreeze, and destroy.
+- [ ] Check service logs at `/var/log/lxc-dashboard.log`.
 - [ ] Confirm the service binds only to the configured address.
 
-## Implementation note
+## Design choice
 
-A small purpose-built POSIX HTTP server was selected to keep the binary and dependencies minimal on Gentoo. It is easier to audit than bringing in a large web framework, but it does not yet provide WebSocket support; terminal access is therefore outside this initial version.
+This first cut uses a small purpose-built POSIX socket HTTP server to minimize dependencies and keep the code auditable. That also means it lacks mature HTTP/WebSocket handling; the full specification should replace or extend this layer with a well-tested embedded HTTP/WebSocket implementation before adding terminal support.

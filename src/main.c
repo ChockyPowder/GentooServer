@@ -255,6 +255,7 @@ int main(int argc,char **argv) {
     if(inet_pton(AF_INET,bind_addr,&a.sin_addr)!=1){fprintf(stderr,"bind address must be IPv4 literal\n");close(s);return 2;}
     if(bind(s,(struct sockaddr*)&a,sizeof a)||listen(s,32)){perror("bind/listen");close(s);return 1;}
     fprintf(stderr,"lxc-dashboard listening on %s:%d\n",bind_addr,listen_port);
+    fprintf(stderr, "Press Ctrl+C to quit\n");
 
     while(!stopping){
         struct pollfd pfd={.fd=s,.events=POLLIN};

@@ -1,0 +1,13 @@
+#!/sbin/openrc-run
+description="Self-hosted LXC management dashboard"
+command="/usr/local/bin/lxc-dashboard"
+command_args="${DASHBOARD_OPTS:---bind 127.0.0.1 --port 8088 --auth /etc/lxc-dashboard/auth}"
+command_background="yes"
+pidfile="/run/lxc-dashboard.pid"
+output_log="/var/log/lxc-dashboard.log"
+error_log="/var/log/lxc-dashboard.log"
+start_stop_daemon_args="--user root"
+depend() {
+    need localmount
+    after net
+}

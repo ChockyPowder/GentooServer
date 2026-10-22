@@ -38,7 +38,10 @@ static struct session sessions[SESSIONS];
 static void on_signal(int sig) { (void)sig; stopping = 1; }
 static void copy_s(char *dst, size_t cap, const char *src) {
     if (!cap) return;
-    snprintf(dst, cap, "%s", src ? src : "");
+    if (!src) src = "";
+    size_t i = 0;
+    while (i + 1 < cap && src[i]) { dst[i] = src[i]; i++; }
+    dst[i] = '\0';
 }
 static bool valid_name(const char *s) {
     size_t n = s ? strlen(s) : 0;

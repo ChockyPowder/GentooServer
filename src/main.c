@@ -156,14 +156,16 @@ static bool get_form(const char *body,const char *key,char *out,size_t cap) {
             while(*p && *p!='&' && j+1<cap) { char c=*p++; if(c=='+')c=' '; else if(c=='%'&&p[0]&&p[1]) { char h[3]={p[0],p[1],0}; c=(char)strtol(h,NULL,16);p+=2;} out[j++]=c; }
             out[j]=0; return true;
         }
-        if(!end) break;\n        p=end+1;
+        if(!end) break;
+        p=end+1;
     } return false;
 }
 static void handle(int fd) {
     struct timeval tv={.tv_sec=5,.tv_usec=0}; setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&tv,sizeof tv);
     char req[REQ_MAX+1]; size_t used=0; ssize_t n;
     while(used<REQ_MAX) { n=recv(fd,req+used,REQ_MAX-used,0); if(n<0&&errno==EINTR)continue; if(n<=0)break; used+=(size_t)n; req[used]=0; if(strstr(req,"\r\n\r\n"))break; }
-    if(!used) return;\n    req[used]=0;
+    if(!used) return;
+    req[used]=0;
     char method[8],path[256]; if(sscanf(req,"%7s %255s",method,path)!=2){json_error(fd,400,"bad request");return;}
     char *hend=strstr(req,"\r\n\r\n"); if(!hend){json_error(fd,400,"headers too large");return;}
     size_t headlen=(size_t)(hend-req)+4; size_t content_len=0;

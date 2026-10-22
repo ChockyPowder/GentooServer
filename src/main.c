@@ -156,14 +156,14 @@ static bool get_form(const char *body,const char *key,char *out,size_t cap) {
             while(*p && *p!='&' && j+1<cap) { char c=*p++; if(c=='+')c=' '; else if(c=='%'&&p[0]&&p[1]) { char h[3]={p[0],p[1],0}; c=(char)strtol(h,NULL,16);p+=2;} out[j++]=c; }
             out[j]=0; return true;
         }
-        if(!end)break; p=end+1;
+        if(!end) break;\n        p=end+1;
     } return false;
 }
 static void handle(int fd) {
     struct timeval tv={.tv_sec=5,.tv_usec=0}; setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&tv,sizeof tv);
     char req[REQ_MAX+1]; size_t used=0; ssize_t n;
     while(used<REQ_MAX) { n=recv(fd,req+used,REQ_MAX-used,0); if(n<0&&errno==EINTR)continue; if(n<=0)break; used+=(size_t)n; req[used]=0; if(strstr(req,"\r\n\r\n"))break; }
-    if(!used)return; req[used]=0;
+    if(!used) return;\n    req[used]=0;
     char method[8],path[256]; if(sscanf(req,"%7s %255s",method,path)!=2){json_error(fd,400,"bad request");return;}
     char *hend=strstr(req,"\r\n\r\n"); if(!hend){json_error(fd,400,"headers too large");return;}
     size_t headlen=(size_t)(hend-req)+4; size_t content_len=0;
@@ -198,16 +198,16 @@ static void handle(int fd) {
     if(strcmp(path,"/api/action")==0&&strcmp(method,"POST")==0){
         char name[64]="",action[32]="";(void)get_form(body,"name",name,sizeof name);(void)get_form(body,"action",action,sizeof action);
         if(!valid_name(name)){json_error(fd,400,"invalid container name");return;}
-        char *av[6]={"/usr/bin/lxc-start","-n",name,NULL,NULL,NULL}; const char *bin="/usr/bin/";
+        char *av[6]={"/usr/bin/lxc-start","-n",name,NULL,NULL,NULL};
         if(strcmp(action,"start")==0){av[0]=(char*)"/usr/bin/lxc-start";av[3]=(char*)"-d";av[4]=NULL;}
         else if(strcmp(action,"stop")==0){av[0]=(char*)"/usr/bin/lxc-stop";av[3]=NULL;}
         else if(strcmp(action,"restart")==0){av[0]=(char*)"/usr/bin/lxc-stop";av[3]=(char*)"--reboot";}
-        else if(strcmp(action,"freeze")==0){av[0]=(char*)"/usr/bin/lxc-freeze";av[3]=NULL;}\n        else if(strcmp(action,"unfreeze")==0){av[0]=(char*)"/usr/bin/lxc-unfreeze";av[3]=NULL;}
+        else if(strcmp(action,"freeze")==0){av[0]=(char*)"/usr/bin/lxc-freeze";av[3]=NULL;}
+        else if(strcmp(action,"unfreeze")==0){av[0]=(char*)"/usr/bin/lxc-unfreeze";av[3]=NULL;}
         else if(strcmp(action,"destroy")==0){av[0]=(char*)"/usr/bin/lxc-destroy";av[3]=(char*)"-f";}
         else {json_error(fd,400,"unsupported action");return;}
         if(access(av[0],X_OK)!=0){char alt[128];snprintf(alt,sizeof alt,"/usr/sbin/%s",strrchr(av[0],'/')+1);av[0]=strdup(alt);if(!av[0]){json_error(fd,500,"out of memory");return;}}
         if(strcmp(action,"restart")==0){av[4]=NULL;}
-        (void)bin;
         pid_t pid=fork();if(pid==0){clearenv();setenv("PATH","/usr/sbin:/usr/bin:/sbin:/bin",1);execv(av[0],av);_exit(127);}
         int st=0;if(pid<0||waitpid(pid,&st,0)<0||!WIFEXITED(st)||WEXITSTATUS(st)!=0){json_error(fd,500,"container command failed");return;}
         reply(fd,200,"OK","application/json","{\"ok\":true}",NULL);return;

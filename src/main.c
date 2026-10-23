@@ -5,7 +5,6 @@
 #include <pty.h>
 #include <sys/ioctl.h>
 #include <termios.h>
-#include "terminal.inc"
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -25,6 +24,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <poll.h>
+#include "terminal.inc"
 #define REQ_MAX 16384
 #define NAME_MAX_SAFE 64
 #define SESSIONS 128
@@ -549,6 +549,27 @@ static void handle(int fd) {
     }
     if(!token_ok(tok)) {
         json_error(fd,401,"login required");
+        return;
+    }
+    if(strcmp(method,"GET")==0 && strncmp(path,"/ws/terminal?name=",18)==0) {
+        char name[NAME_MAX_SAFE], key[128]="";
+        const char *np=path+18;
+        size_t nn=strcspn(np,"&");
+        if(nn==0||nn>=sizeof name) { json_error(fd,400,"invalid container"); return; }
+        memcpy(name,np,nn);
+        name[nn]=0;
+        if(!valid_name(name)) { json_error(fd,400,"invalid container"); return; }
+        char *kh=strcasestr(req,"Sec-WebSocket-Key:");
+        if(kh&&kh<hend) {
+            kh+=18;
+            while(*kh==' '||*kh=='\t')kh++;
+            size_t kn=strcspn(kh,"\r\n");
+            if(kn<sizeof key) { memcpy(key,kh,kn); key[kn]=0; }
+        }
+        if(strlen(key)<20) { json_error(fd,400,"missing websocket key"); return; }
+        pid_t worker=fork();
+        if(worker<0) { json_error(fd,500,"cannot start terminal"); return; }
+        if(worker==0) { terminal_worker(fd,name,key); close(fd); _exit(0); }
         return;
     }
     if(strcmp(path,"/api/containers")==0&&strcmp(method,"GET")==0) {

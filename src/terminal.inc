@@ -93,6 +93,16 @@ static void terminal_worker(int client, const char *name, const char *key) {
             if(opcode==8) { (void)ws_send(client,8,buf,got>125?0:got); break; }
             if(opcode==9) { if(ws_send(client,10,buf,got))break; }
             else if(opcode==1||opcode==2) {
+                if(opcode==1 && got<128 && got>=17 && memcmp(buf,"{\"type\":\"resize\",",17)==0) {
+                    buf[got]=0;
+                    unsigned cols=0,rows=0;
+                    if(sscanf((char *)buf,"{\"type\":\"resize\",\"cols\":%u,\"rows\":%u}",&cols,&rows)==2 &&
+                       cols>=2 && cols<=500 && rows>=2 && rows<=200) {
+                        struct winsize size={.ws_col=(unsigned short)cols,.ws_row=(unsigned short)rows};
+                        (void)ioctl(master,TIOCSWINSZ,&size);
+                    }
+                    continue;
+                }
                 size_t off=0;
                 while(off<got) {
                     ssize_t w=write(master,buf+off,got-off);

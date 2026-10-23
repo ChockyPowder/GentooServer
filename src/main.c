@@ -18,6 +18,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/wait.h>
@@ -260,6 +261,49 @@ static void containers_json(int fd) {
     strncat(out,"]",sizeof out-strlen(out)-1);
     reply(fd,200,"OK","application/json",out,NULL);
 }
+static unsigned long long read_number_file(const char *path) {
+    FILE *f=fopen(path,"r");
+    if(!f)return 0;
+    unsigned long long value=0;
+    if(fscanf(f,"%llu",&value)!=1)value=0;
+    fclose(f);
+    return value;
+}
+static void usage_json(int fd,const char *name) {
+    char info[2048]="",cg[PATH_MAX]="",mf[PATH_MAX]="",lf[PATH_MAX]="",cfpath[PATH_MAX]="",cmf[PATH_MAX]="";
+    char *av[]={"/usr/bin/lxc-info","-n",(char *)name,NULL};
+    if(access(av[0],X_OK)!=0)av[0]="/usr/sbin/lxc-info";
+    (void)run_capture(av,info,sizeof info);
+    char *p=strstr(info,"PID:"); long pid=0;
+    if(p){p+=4;while(*p==' '||*p=='\t')p++;pid=strtol(p,NULL,10);}
+    unsigned long long mem=0,lim=0,cpu=0,quota=0,period=100000;
+    if(pid>0) {
+        char proc[PATH_MAX]; snprintf(proc,sizeof proc,"/proc/%ld/cgroup",pid);
+        FILE *f=fopen(proc,"r");
+        if(f){char line[PATH_MAX+128];while(fgets(line,sizeof line,f)){
+            char *sep=strstr(line,"::");
+            if(sep){sep+=2;sep[strcspn(sep,"\r\n")]=0;snprintf(cg,sizeof cg,"/sys/fs/cgroup%s",sep);
+                snprintf(mf,sizeof mf,"%s/memory.current",cg);snprintf(lf,sizeof lf,"%s/memory.max",cg);
+                snprintf(cfpath,sizeof cfpath,"%s/cpu.stat",cg);snprintf(cmf,sizeof cmf,"%s/cpu.max",cg);break;}
+            if(strstr(line,":memory:")){char *q=strchr(line,':');if(q)q=strchr(q+1,':');if(q){q++;q[strcspn(q,"\r\n")]=0;snprintf(cg,sizeof cg,"/sys/fs/cgroup/memory%s",q);snprintf(mf,sizeof mf,"%s/memory.usage_in_bytes",cg);snprintf(lf,sizeof lf,"%s/memory.limit_in_bytes",cg);}}
+            if(strstr(line,":cpuacct:")){char *q=strchr(line,':');if(q)q=strchr(q+1,':');if(q){q++;q[strcspn(q,"\r\n")]=0;char cp[PATH_MAX];snprintf(cp,sizeof cp,"/sys/fs/cgroup/cpuacct%s/cpuacct.usage",q);cpu=read_number_file(cp)/1000ULL;}}
+        }fclose(f);}
+        mem=read_number_file(mf);lim=read_number_file(lf);
+        if(strstr(lf,"memory.max")){FILE *f=fopen(lf,"r");if(f){char v[64]="";if(fscanf(f,"%63s",v)==1)lim=strcmp(v,"max")==0?0:strtoull(v,NULL,10);fclose(f);}}
+        else if(lim>=(1ULL<<60))lim=0;
+        FILE *f=fopen(cfpath,"r");if(f){char line[256];while(fgets(line,sizeof line,f))if(sscanf(line,"usage_usec %llu",&cpu)==1)break;fclose(f);}
+        f=fopen(cmf,"r");if(f){char q[64]="";if(fscanf(f,"%63s %llu",q,&period)==2)quota=strcmp(q,"max")==0?0:strtoull(q,NULL,10);fclose(f);}
+    }
+    char diskpath[PATH_MAX];snprintf(diskpath,sizeof diskpath,"/var/lib/lxc/%s/rootfs",name);
+    char *duav[]={"/usr/bin/du","-skx",diskpath,NULL};char duout[256]="";
+    if(access(duav[0],X_OK)!=0)duav[0]="/bin/du";(void)run_capture(duav,duout,sizeof duout);
+    unsigned long long kb=0;(void)sscanf(duout,"%llu",&kb);
+    struct statvfs sv;unsigned long long total=0;
+    if(statvfs(diskpath,&sv)==0)total=(unsigned long long)sv.f_blocks*(unsigned long long)sv.f_frsize;
+    char out[512];snprintf(out,sizeof out,"{\"memory_used\":%llu,\"memory_limit\":%llu,\"cpu_usec\":%llu,\"cpu_quota\":%llu,\"cpu_period\":%llu,\"disk_bytes\":%llu,\"filesystem_bytes\":%llu}",mem,lim,cpu,quota,period,kb*1024ULL,total);
+    reply(fd,200,"OK","application/json",out,NULL);
+}
+
 static bool get_form(const char *body,const char *key,char *out,size_t cap) {
     char needle[80];
     if(snprintf(needle,sizeof needle,"%s=",key)>=(int)sizeof needle)return false;
@@ -732,6 +776,13 @@ static void handle(int fd) {
     if(strcmp(path,"/api/containers")==0&&strcmp(method,"GET")==0) {
         containers_json(fd);
         return;
+    }
+    if(strncmp(path,"/api/usage?name=",16)==0&&strcmp(method,"GET")==0) {
+        char name[64]; const char *np=path+16; size_t nn=strcspn(np,"&");
+        if(nn==0||nn>=sizeof name) { json_error(fd,400,"invalid container name"); return; }
+        memcpy(name,np,nn); name[nn]=0;
+        if(!valid_name(name)) { json_error(fd,400,"invalid container name"); return; }
+        usage_json(fd,name); return;
     }
     if(strcmp(path,"/api/terminal")==0&&strcmp(method,"POST")==0) {
         char name[64]="",command[2048]="";

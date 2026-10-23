@@ -463,6 +463,7 @@ static void handle(int fd) {
             "      const button = document.createElement('button');\n"
             "      button.type = 'button';\n"
             "      button.textContent = container.name;\n"
+            "      if (selected && selected === container.name) item.className = 'selected';\n"
             "      button.addEventListener('click', () => show(container));\n"
             "      item.append(button, document.createTextNode(' — ' + container.state + ' — IP: ' + (container.ip || '-')));\n"
             "      list.appendChild(item);\n"

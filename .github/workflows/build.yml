@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install -y build-essential libcrypt-dev
+        run: sudo apt-get update && sudo apt-get install -y build-essential libcrypt-dev libssl-dev
       - name: Strict release build
         run: make clean all
       - name: ASan/UBSan build

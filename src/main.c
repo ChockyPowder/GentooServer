@@ -5,6 +5,7 @@
 #include <pty.h>
 #include <sys/ioctl.h>
 #include <termios.h>
+#include "terminal.inc"
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>

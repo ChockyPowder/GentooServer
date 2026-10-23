@@ -270,7 +270,7 @@ static unsigned long long read_number_file(const char *path) {
     return value;
 }
 static void usage_json(int fd,const char *name) {
-    char info[2048]="",cg[PATH_MAX]="",mf[PATH_MAX]="",lf[PATH_MAX]="",cfpath[PATH_MAX]="",cmf[PATH_MAX]="";
+    char info[2048]="",cg[PATH_MAX*2]="",mf[PATH_MAX*2]="",lf[PATH_MAX*2]="",cfpath[PATH_MAX*2]="",cmf[PATH_MAX*2]="";
     char *av[]={"/usr/bin/lxc-info","-n",(char *)name,NULL};
     if(access(av[0],X_OK)!=0)av[0]="/usr/sbin/lxc-info";
     (void)run_capture(av,info,sizeof info);
@@ -286,7 +286,7 @@ static void usage_json(int fd,const char *name) {
                 snprintf(mf,sizeof mf,"%s/memory.current",cg);snprintf(lf,sizeof lf,"%s/memory.max",cg);
                 snprintf(cfpath,sizeof cfpath,"%s/cpu.stat",cg);snprintf(cmf,sizeof cmf,"%s/cpu.max",cg);break;}
             if(strstr(line,":memory:")){char *q=strchr(line,':');if(q)q=strchr(q+1,':');if(q){q++;q[strcspn(q,"\r\n")]=0;snprintf(cg,sizeof cg,"/sys/fs/cgroup/memory%s",q);snprintf(mf,sizeof mf,"%s/memory.usage_in_bytes",cg);snprintf(lf,sizeof lf,"%s/memory.limit_in_bytes",cg);}}
-            if(strstr(line,":cpuacct:")){char *q=strchr(line,':');if(q)q=strchr(q+1,':');if(q){q++;q[strcspn(q,"\r\n")]=0;char cp[PATH_MAX];snprintf(cp,sizeof cp,"/sys/fs/cgroup/cpuacct%s/cpuacct.usage",q);cpu=read_number_file(cp)/1000ULL;}}
+            if(strstr(line,":cpuacct:")){char *q=strchr(line,':');if(q)q=strchr(q+1,':');if(q){q++;q[strcspn(q,"\r\n")]=0;char cp[PATH_MAX*2];snprintf(cp,sizeof cp,"/sys/fs/cgroup/cpuacct%s/cpuacct.usage",q);cpu=read_number_file(cp)/1000ULL;}}
         }fclose(f);}
         mem=read_number_file(mf);lim=read_number_file(lf);
         if(strstr(lf,"memory.max")){FILE *f=fopen(lf,"r");if(f){char v[64]="";if(fscanf(f,"%63s",v)==1)lim=strcmp(v,"max")==0?0:strtoull(v,NULL,10);fclose(f);}}

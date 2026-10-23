@@ -187,13 +187,22 @@ static int run_capture(char *const argv[], char *out,size_t cap) {
 }
 static void json_escape(char *out,size_t cap,const char *in) {
     size_t j=0;
-    for(size_t i=0;in[i]&&j+2<cap;i++) {
+    for(size_t i=0;in[i]&&j+6<cap;i++) {
         unsigned char c=(unsigned char)in[i];
-        if(c=='"'||c=='\\') {
-            out[j++]='\\';
+        if(c=='"'||c=='\\\\') {
+            out[j++]='\\\\';
+            out[j++]=(char)c;
+        } else if(c=='\n') {
+            out[j++]='\\\\'; out[j++]='n';
+        } else if(c=='\r') {
+            out[j++]='\\\\'; out[j++]='r';
+        } else if(c=='\t') {
+            out[j++]='\\\\'; out[j++]='t';
+        } else if(c<32) {
+            out[j++]='?';
+        } else {
             out[j++]=(char)c;
         }
-        else if(c>=32) out[j++]=(char)c;
     }
     out[j]=0;
 }
@@ -378,6 +387,13 @@ static void handle(int fd) {
             "<p>IP address: <span id=\"selected-ip\">-</span></p>\n"
             "<p id=\"actions\"></p>\n"
             "<hr>\n"
+            "<h2>Container terminal</h2>\n"
+            "<pre id=\"terminal-output\" style=\"background:#000;color:#fff;padding:10px;min-height:200px;white-space:pre-wrap;overflow-wrap:anywhere;\">Select a running container.</pre>\n"
+            "<form id=\"terminal-form\">\n"
+            "<p><label>Command: <input id=\"terminal-command\" name=\"command\" required autocomplete=\"off\"></label> <button type=\"submit\">Run</button></p>\n"
+            "</form>\n"
+            "<p>Each command runs in a new shell inside the selected running container.</p>\n"
+            "<hr>\n"
             "<h2>Create container</h2>\n"
             "<form id=\"create-form\">\n"
             "<p><label>Name: <input id=\"newname\" name=\"name\" required></label></p>\n"
@@ -454,6 +470,22 @@ static void handle(int fd) {
             "  await fetch('/logout', {method: 'POST'});\n"
             "  location.reload();\n"
             "});\n"
+            "byId('terminal-form').addEventListener('submit', async event => {\n"
+            "  event.preventDefault();\n"
+            "  if (!selected) { byId('terminal-output').textContent = 'Select a container first.'; return; }\n"
+            "  if (byId('selected-state').textContent.trim() !== 'RUNNING') { byId('terminal-output').textContent = 'The selected container must be running.'; return; }\n"
+            "  const command = byId('terminal-command').value.trim();\n"
+            "  if (!command) return;\n"
+            "  const output = byId('terminal-output');\n"
+            "  output.textContent += '\\n$ ' + command + '\\n';\n"
+            "  byId('terminal-command').value = '';\n"
+            "  try {\n"
+            "    const result = await api('/api/terminal', 'name=' + encodeURIComponent(selected) + '&command=' + encodeURIComponent(command));\n"
+            "    output.textContent += result.output || '';\n"
+            "    if (result.exit_code !== 0) output.textContent += '\\n[exit code ' + result.exit_code + ']';\n"
+            "  } catch (error) { output.textContent += '\\nError: ' + error.message; }\n"
+            "  output.scrollTop = output.scrollHeight;\n"
+            "});\n"
             "byId('create-form').addEventListener('submit', async event => {\n"
             "  event.preventDefault();\n"
             "  const name = byId('newname').value.trim();\n"
@@ -516,6 +548,29 @@ static void handle(int fd) {
     }
     if(strcmp(path,"/api/containers")==0&&strcmp(method,"GET")==0) {
         containers_json(fd);
+        return;
+    }
+    if(strcmp(path,"/api/terminal")==0&&strcmp(method,"POST")==0) {
+        char name[64]="",command[2048]="";
+        (void)get_form(body,"name",name,sizeof name);
+        (void)get_form(body,"command",command,sizeof command);
+        if(!valid_name(name)||!command[0]) {
+            json_error(fd,400,"invalid container name or empty command");
+            return;
+        }
+        char *av[]={
+            "/usr/bin/lxc-attach","-n",name,"--","/bin/sh","-lc",command,NULL
+        };
+        if(access(av[0],X_OK)!=0)av[0]="/usr/sbin/lxc-attach";
+        char output[4096]="",escaped[10000],response[11000];
+        int exit_code=run_capture(av,output,sizeof output);
+        if(exit_code<0) {
+            json_error(fd,500,"could not run lxc-attach");
+            return;
+        }
+        json_escape(escaped,sizeof escaped,output);
+        snprintf(response,sizeof response,"{\"output\":\"%s\",\"exit_code\":%d}",escaped,exit_code);
+        reply(fd,200,"OK","application/json",response,NULL);
         return;
     }
     if(strcmp(path,"/logout")==0) {

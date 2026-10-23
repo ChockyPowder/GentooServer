@@ -1,6 +1,10 @@
 #define _GNU_SOURCE
 #include <arpa/inet.h>
 #include <crypt.h>
+#include <openssl/sha.h>
+#include <pty.h>
+#include <sys/ioctl.h>
+#include <termios.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>

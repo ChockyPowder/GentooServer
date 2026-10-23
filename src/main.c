@@ -291,12 +291,13 @@ static void usage_json(int fd,const char *name) {
         mem=read_number_file(mf);lim=read_number_file(lf);
         if(strstr(lf,"memory.max")){FILE *f=fopen(lf,"r");if(f){char v[64]="";if(fscanf(f,"%63s",v)==1)lim=strcmp(v,"max")==0?0:strtoull(v,NULL,10);fclose(f);}}
         else if(lim>=(1ULL<<60))lim=0;
-        FILE *f=fopen(cfpath,"r");if(f){char line[256];while(fgets(line,sizeof line,f))if(sscanf(line,"usage_usec %llu",&cpu)==1)break;fclose(f);}
+        FILE *cf=fopen(cfpath,"r");if(cf){char line[256];while(fgets(line,sizeof line,cf))if(sscanf(line,"usage_usec %llu",&cpu)==1)break;fclose(cf);}
         f=fopen(cmf,"r");if(f){char q[64]="";if(fscanf(f,"%63s %llu",q,&period)==2)quota=strcmp(q,"max")==0?0:strtoull(q,NULL,10);fclose(f);}
     }
     char diskpath[PATH_MAX];snprintf(diskpath,sizeof diskpath,"/var/lib/lxc/%s/rootfs",name);
     char *duav[]={"/usr/bin/du","-skx",diskpath,NULL};char duout[256]="";
-    if(access(duav[0],X_OK)!=0)duav[0]="/bin/du";(void)run_capture(duav,duout,sizeof duout);
+    if(access(duav[0],X_OK)!=0)duav[0]="/bin/du";
+    (void)run_capture(duav,duout,sizeof duout);
     unsigned long long kb=0;(void)sscanf(duout,"%llu",&kb);
     struct statvfs sv;unsigned long long total=0;
     if(statvfs(diskpath,&sv)==0)total=(unsigned long long)sv.f_blocks*(unsigned long long)sv.f_frsize;
@@ -338,13 +339,13 @@ static int save_limits(const char *name,unsigned long long cpu_milli,unsigned lo
     free(line);fclose(in);
     unsigned long long quota=cpu_milli*100ULL;
     if(v2) {
-        if(fprintf(out,"\\nlxc.cgroup2.cpu.max = %llu 100000\\nlxc.cgroup2.memory.max = ",quota)<0)goto fail;
-        if(memory_mib) { if(fprintf(out,"%llu\\n",memory_mib*1024ULL*1024ULL)<0)goto fail; }
-        else if(fputs("max\\n",out)==EOF)goto fail;
+        if(fprintf(out,"\nlxc.cgroup2.cpu.max = %llu 100000\nlxc.cgroup2.memory.max = ",quota)<0)goto fail;
+        if(memory_mib) { if(fprintf(out,"%llu\n",memory_mib*1024ULL*1024ULL)<0)goto fail; }
+        else if(fputs("max\n",out)==EOF)goto fail;
     } else {
-        if(fprintf(out,"\\nlxc.cgroup.cpu.cfs_quota_us = %llu\\nlxc.cgroup.cpu.cfs_period_us = 100000\\nlxc.cgroup.memory.limit_in_bytes = ",quota)<0)goto fail;
-        if(memory_mib) { if(fprintf(out,"%llu\\n",memory_mib*1024ULL*1024ULL)<0)goto fail; }
-        else if(fputs("-1\\n",out)==EOF)goto fail;
+        if(fprintf(out,"\nlxc.cgroup.cpu.cfs_quota_us = %llu\nlxc.cgroup.cpu.cfs_period_us = 100000\nlxc.cgroup.memory.limit_in_bytes = ",quota)<0)goto fail;
+        if(memory_mib) { if(fprintf(out,"%llu\n",memory_mib*1024ULL*1024ULL)<0)goto fail; }
+        else if(fputs("-1\n",out)==EOF)goto fail;
     }
     if(fflush(out)||fsync(fileno(out)))goto fail;
     if(fclose(out)){unlink(tmp);return -1;}

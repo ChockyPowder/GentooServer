@@ -447,7 +447,6 @@ static void handle(int fd) {
             ".metric-label { display: block; margin: 0 0 2px; color: var(--muted); font-size: 10px; }\n"
             ".metric-value { display: block; overflow-wrap: anywhere; font: 12px/1.35 ui-monospace, SFMono-Regular, monospace; }\n"
             ".state-pill { display: inline; }\n"
-            ".state-pill:before { content: \"\"; width: 6px; height: 6px; flex: 0 0 6px; background: #858e97; }\n"
             ".actions { display: flex; align-items: center; gap: 5px; margin-top: 6px; }\n"
             ".actions .metric-label { margin: 0 3px 0 0; }\n"
             ".actions select { width: min(205px, 45%); min-width: 130px; }\n"

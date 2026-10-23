@@ -19,6 +19,7 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+#include <poll.h>
 #define REQ_MAX 16384
 #define NAME_MAX_SAFE 64
 #define SESSIONS 128
@@ -713,18 +714,33 @@ int main(int argc,char **argv) {
         close(s);
         return 1;
     }
-    fprintf(stderr,"lxc-dashboard listening on %s:%d\n",bind_addr,listen_port);
-    while(!stopping) {
-        int c=accept4(s,NULL,NULL,SOCK_CLOEXEC);
-        if(c<0) {
-            if(errno==EINTR)continue;
-            if(stopping)break;
+    fprintf(stderr, "lxc-dashboard listening on %s:%d\n", bind_addr, listen_port);
+    fprintf(stderr, "Press Ctrl+C to quit\n");
+    while (!stopping) {
+        struct pollfd pfd = {
+            .fd = s,
+            .events = POLLIN
+        };
+        int r = poll(&pfd, 1, 1000);
+        /* Return on signal or after one second so we can re-check stopping. */
+        if (r < 0) {
+            if (errno == EINTR) continue;
+            perror("poll");
+            break;
+        }
+        if (r == 0) continue;
+
+        int c = accept4(s, NULL, NULL, SOCK_CLOEXEC);
+        if (c < 0) {
+            if (errno == EINTR || errno == EAGAIN) continue;
+            if (stopping) break;
             perror("accept");
             continue;
         }
         handle(c);
         close(c);
     }
+    fprintf(stderr, "shutting down\n");
     close(s);
     return 0;
 }

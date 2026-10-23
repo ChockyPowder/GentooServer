@@ -1,7 +1,7 @@
 CC ?= cc
 CFLAGS ?= -O2 -std=c11 -Wall -Wextra -Werror -D_FORTIFY_SOURCE=2
 LDFLAGS ?=
-LDLIBS ?= -lcrypt -lutil
+LDLIBS ?= -lcrypt -lutil -lcrypto
 
 .PHONY: all clean debug
 all: lxc-dashboard

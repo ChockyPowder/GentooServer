@@ -304,6 +304,56 @@ static void usage_json(int fd,const char *name) {
     reply(fd,200,"OK","application/json",out,NULL);
 }
 
+static bool config_key(const char *line,const char *key) {
+    size_t n=strlen(key);
+    return strncmp(line,key,n)==0 && (line[n]==' '||line[n]=='\t'||line[n]=='=');
+}
+static int save_limits(const char *name,unsigned long long cpu_milli,unsigned long long memory_mib) {
+    char path[256],tmp[320];
+    if(snprintf(path,sizeof path,"/var/lib/lxc/%s/config",name)>=(int)sizeof path)return -1;
+    if(snprintf(tmp,sizeof tmp,"/var/lib/lxc/%s/config.dashboard.tmp",name)>=(int)sizeof tmp)return -1;
+    struct stat st;
+    if(stat(path,&st)||!S_ISREG(st.st_mode))return -1;
+    FILE *in=fopen(path,"r");
+    if(!in)return -1;
+    int outfd=open(tmp,O_WRONLY|O_CREAT|O_EXCL|O_CLOEXEC,0600);
+    if(outfd<0){fclose(in);return -1;}
+    if(fchmod(outfd,st.st_mode&0777)){close(outfd);unlink(tmp);fclose(in);return -1;}
+    FILE *out=fdopen(outfd,"w");
+    if(!out){close(outfd);unlink(tmp);fclose(in);return -1;}
+    bool v2=access("/sys/fs/cgroup/cgroup.controllers",R_OK)==0;
+    const char *cpu_keys_v2[]={"lxc.cgroup2.cpu.max"};
+    const char *mem_keys_v2[]={"lxc.cgroup2.memory.max"};
+    const char *cpu_keys_v1[]={"lxc.cgroup.cpu.cfs_quota_us","lxc.cgroup.cpu.cfs_period_us"};
+    const char *mem_keys_v1[]={"lxc.cgroup.memory.limit_in_bytes"};
+    char *line=NULL;size_t cap=0;ssize_t n;
+    while((n=getline(&line,&cap,in))!=-1) {
+        bool skip=false;
+        if(v2) skip=config_key(line,cpu_keys_v2[0])||config_key(line,mem_keys_v2[0])||
+                    config_key(line,"lxc.cgroup.cpu.cfs_quota_us")||config_key(line,"lxc.cgroup.cpu.cfs_period_us")||config_key(line,"lxc.cgroup.memory.limit_in_bytes");
+        else skip=config_key(line,cpu_keys_v1[0])||config_key(line,cpu_keys_v1[1])||config_key(line,mem_keys_v1[0])||
+                    config_key(line,"lxc.cgroup2.cpu.max")||config_key(line,"lxc.cgroup2.memory.max");
+        if(!skip && fwrite(line,1,(size_t)n,out)!=(size_t)n){free(line);fclose(in);fclose(out);unlink(tmp);return -1;}
+    }
+    free(line);fclose(in);
+    unsigned long long quota=cpu_milli*100ULL;
+    if(v2) {
+        if(fprintf(out,"\\nlxc.cgroup2.cpu.max = %llu 100000\\nlxc.cgroup2.memory.max = ",quota)<0)goto fail;
+        if(memory_mib) { if(fprintf(out,"%llu\\n",memory_mib*1024ULL*1024ULL)<0)goto fail; }
+        else if(fputs("max\\n",out)==EOF)goto fail;
+    } else {
+        if(fprintf(out,"\\nlxc.cgroup.cpu.cfs_quota_us = %llu\\nlxc.cgroup.cpu.cfs_period_us = 100000\\nlxc.cgroup.memory.limit_in_bytes = ",quota)<0)goto fail;
+        if(memory_mib) { if(fprintf(out,"%llu\\n",memory_mib*1024ULL*1024ULL)<0)goto fail; }
+        else if(fputs("-1\\n",out)==EOF)goto fail;
+    }
+    if(fflush(out)||fsync(fileno(out)))goto fail;
+    if(fclose(out)){unlink(tmp);return -1;}
+    if(rename(tmp,path)){unlink(tmp);return -1;}
+    return 0;
+fail:
+    fclose(out);unlink(tmp);return -1;
+}
+
 static bool get_form(const char *body,const char *key,char *out,size_t cap) {
     char needle[80];
     if(snprintf(needle,sizeof needle,"%s=",key)>=(int)sizeof needle)return false;
@@ -491,6 +541,9 @@ static void handle(int fd) {
             ".metric-label { display: block; margin: 0 0 2px; color: var(--muted); font-size: 10px; }\n"
             ".metric-value { display: block; overflow-wrap: anywhere; font: 12px/1.35 ui-monospace, SFMono-Regular, monospace; }\n"
             ".usage-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin-top: 6px; }\n"
+            ".limits-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 5px; align-items: end; margin-top: 6px; }\n"
+            ".limits-form input { width: 100%; min-width: 0; height: 27px; padding: 4px 6px; color: var(--text); background: #171b1e; border: 1px solid #485159; }\n"
+            ".limits-help { margin-top: 4px; color: var(--muted); font-size: 10px; }\n"
             ".usage-item { min-width: 0; padding: 5px 7px; background: #191d20; border: 1px solid #363e44; }\n"
             ".usage-top { display: flex; align-items: baseline; justify-content: space-between; gap: 5px; }\n"
             ".usage-label { color: var(--muted); font-size: 10px; }\n"
@@ -596,6 +649,12 @@ static void handle(int fd) {
             "            <div class=\"usage-item\"><div class=\"usage-top\"><span class=\"usage-label\">Memory</span><span class=\"usage-value\" id=\"memory-value\">—</span></div><div class=\"usage-track\"><div class=\"usage-fill\" id=\"memory-fill\"></div></div><div class=\"usage-note\" id=\"memory-note\">Used / limit</div></div>\n"
             "            <div class=\"usage-item\"><div class=\"usage-top\"><span class=\"usage-label\">Disk</span><span class=\"usage-value\" id=\"disk-value\">—</span></div><div class=\"usage-track\"><div class=\"usage-fill\" id=\"disk-fill\"></div></div><div class=\"usage-note\" id=\"disk-note\">Root filesystem</div></div>\n"
             "          </div>\n"
+            "          <form id=\"limits-form\" class=\"limits-form\">\n"
+            "            <label class=\"field\">CPU cores (0.1–64)<input id=\"limit-cpu\" type=\"number\" min=\"0.1\" max=\"64\" step=\"0.1\" value=\"1\" required></label>\n"
+            "            <label class=\"field\">RAM limit MiB (0 = unlimited)<input id=\"limit-memory\" type=\"number\" min=\"0\" max=\"1048576\" step=\"128\" value=\"1024\" required></label>\n"
+            "            <button type=\"submit\">Save limits</button>\n"
+            "          </form>\n"
+            "          <div class=\"limits-help\">Saved to LXC config; takes effect on next start. Disk caps depend on the storage backend.</div>\n"
             "          <div class=\"actions\"><label for=\"action-select\" class=\"metric-label\">Action</label><select id=\"action-select\" disabled><option value=\"\">Choose action…</option><option value=\"start\">Start</option><option value=\"stop\">Stop</option><option value=\"restart\">Restart</option><option value=\"freeze\">Freeze</option><option value=\"unfreeze\">Unfreeze</option><option value=\"destroy\">Destroy</option></select><button id=\"run-action\" type=\"button\" disabled>Run</button></div>\n"
             "        </div>\n"
             "      </section>\n"
@@ -669,6 +728,7 @@ static void handle(int fd) {
             "function fmtBytes(n) { if (!n) return '0 B'; const units=['B','KiB','MiB','GiB','TiB']; let i=0,v=n; while(v>=1024&&i<units.length-1){v/=1024;i++;} return v.toFixed(i===0?0:1)+' '+units[i]; }\n"
             "function setUsage(id,value,note,pct) { byId(id+'-value').textContent=value; byId(id+'-note').textContent=note; byId(id+'-fill').style.width=Math.max(0,Math.min(100,pct||0))+'%'; }\n"
             "async function loadUsage(name) { try { const u=await api('/api/usage?name='+encodeURIComponent(name)); const now=Date.now(); let cpu=0; if(previousCpu&&previousCpu.name===name&&u.cpu_usec>=previousCpu.value) cpu=(u.cpu_usec-previousCpu.value)*1000/(now-previousCpu.time)/1000000*100; previousCpu={name,value:u.cpu_usec,time:now}; const cap=u.cpu_quota&&u.cpu_period?u.cpu_quota/u.cpu_period*100:100; setUsage('cpu',cpu.toFixed(1)+'%',u.cpu_quota?'Limit '+(cap/100).toFixed(2)+' CPU':'Host CPU capacity',cap?cpu/cap*100:0); const mp=u.memory_limit?u.memory_used/u.memory_limit*100:0; setUsage('memory',fmtBytes(u.memory_used),u.memory_limit?fmtBytes(u.memory_used)+' / '+fmtBytes(u.memory_limit):'No detected limit',mp); const dp=u.filesystem_bytes?u.disk_bytes/u.filesystem_bytes*100:0; setUsage('disk',fmtBytes(u.disk_bytes),u.filesystem_bytes?'Rootfs; '+dp.toFixed(1)+'% of filesystem capacity':'Rootfs size',dp); } catch (_) { if(selected===name) { setUsage('cpu','—','Unavailable',0); setUsage('memory','—','Unavailable',0); setUsage('disk','—','Unavailable',0); } } }\n"
+            "byId('limits-form').addEventListener('submit', async event => { event.preventDefault(); if(!selected)return; const cpu=Number(byId('limit-cpu').value); const memory=Number(byId('limit-memory').value); if(!Number.isFinite(cpu)||cpu<0.1||cpu>64||!Number.isInteger(memory)||memory<0||memory>1048576){byId('message').textContent='Invalid CPU or RAM limit.';return;} try { await api('/api/limits','name='+encodeURIComponent(selected)+'&cpu_milli='+Math.round(cpu*1000)+'&memory_mib='+memory); byId('message').textContent='CPU and RAM limits saved; restart container to apply.'; } catch(error) { byId('message').textContent=error.message; } });\n"
             "async function act(action) {\n"
             "  if (!selected) return;\n"
             "  if (action === 'destroy' && !confirm('Permanently destroy ' + selected + '? This cannot be undone.')) return;\n"
@@ -795,6 +855,19 @@ static void handle(int fd) {
     if(strcmp(path,"/api/containers")==0&&strcmp(method,"GET")==0) {
         containers_json(fd);
         return;
+    }
+    if(strcmp(path,"/api/limits")==0&&strcmp(method,"POST")==0) {
+        char name[64]="",cpu[32]="",memory[32]="";
+        (void)get_form(body,"name",name,sizeof name);
+        (void)get_form(body,"cpu_milli",cpu,sizeof cpu);
+        (void)get_form(body,"memory_mib",memory,sizeof memory);
+        char *ce=NULL,*me=NULL;
+        unsigned long long cv=strtoull(cpu,&ce,10),mv=strtoull(memory,&me,10);
+        if(!valid_name(name)||!cpu[0]||!memory[0]||!ce||*ce||!me||*me||cv<100||cv>64000||mv>1048576) {
+            json_error(fd,400,"CPU must be 0.1-64 cores and memory 0-1048576 MiB"); return;
+        }
+        if(save_limits(name,cv,mv)) { json_error(fd,500,"could not save container config; stop the container and check config permissions"); return; }
+        reply(fd,200,"OK","application/json","{\"ok\":true,\"applies\":\"next start\"}",NULL); return;
     }
     if(strncmp(path,"/api/usage?name=",16)==0&&strcmp(method,"GET")==0) {
         char name[64]; const char *np=path+16; size_t nn=strcspn(np,"&");

@@ -532,7 +532,7 @@ static void handle(int fd) {
             "        </form></div></details>\n"
             "      </section>\n"
             "    </aside>\n"
-            "    <div class=\"stack\">\n"
+            "    <div class=\"stack right-stack\">\n"
             "      <section class=\"panel\" aria-labelledby=\"selected-title\">\n"
             "        <div class=\"panel-head\"><h2 id=\"selected-title\">Selected container</h2><span class=\"count\" id=\"selected-state\">No selection</span></div>\n"
             "        <div class=\"panel-body\">\n"

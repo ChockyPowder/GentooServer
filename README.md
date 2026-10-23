@@ -2,7 +2,7 @@
 
 A small C11, self-hosted web UI for LXC containers on Gentoo/OpenRC. No Python, Node.js, systemd, or external frontend runtime is required.
 
-> **Status: early MVP.** The dashboard implements login/session handling, container discovery/status, lifecycle actions, and a persistent PTY shell over WebSocket. The terminal UI is a basic text view rather than a full xterm.js emulator; terminal resize and rich ANSI/curses rendering are not implemented. Streamed template-download progress, cgroup/network time-series graphs, log viewer, host overview, and a non-blocking job queue are still outstanding. This has not yet been validated on a Gentoo host; do not treat it as production-ready.
+> **Status: early MVP.** The dashboard implements login/session handling, container discovery/status, lifecycle actions, and a persistent PTY shell over WebSocket. The terminal UI uses xterm.js for ANSI colours, cursor control, interactive full-screen terminal applications, bounded scrollback, and PTY resizing. The browser loads xterm.js from jsDelivr; self-host the assets if the server/browser must work offline. Streamed template-download progress, cgroup/network time-series graphs, log viewer, host overview, and a non-blocking job queue are still outstanding. This has not yet been validated on a Gentoo host; do not treat it as production-ready.
 
 ## Build on Gentoo
 
@@ -12,7 +12,7 @@ make
 make debug
 ```
 
-The build uses libc, libxcrypt, OpenSSL (for the WebSocket handshake), and libutil (for `forkpty`). `make debug` builds with AddressSanitizer and UndefinedBehaviorSanitizer. The dashboard source and embedded HTML/CSS/JS are in `src/main.c`; the PTY/WebSocket transport is in `src/terminal.inc`.
+The build uses libc, libxcrypt, OpenSSL (for the WebSocket handshake), and libutil (for `forkpty`). `make debug` builds with AddressSanitizer and UndefinedBehaviorSanitizer. The dashboard source and embedded HTML/CSS/JS are in `src/main.c`; the PTY/WebSocket transport is in `src/terminal.inc`. The terminal uses xterm.js and its fit add-on from jsDelivr, so the browser needs access to that CDN unless those assets are self-hosted.
 
 Install:
 

@@ -189,15 +189,15 @@ static void json_escape(char *out,size_t cap,const char *in) {
     size_t j=0;
     for(size_t i=0;in[i]&&j+6<cap;i++) {
         unsigned char c=(unsigned char)in[i];
-        if(c=='"'||c=='\\\\') {
-            out[j++]='\\\\';
+        if(c=='"'||c=='\\') {
+            out[j++]='\\';
             out[j++]=(char)c;
         } else if(c=='\n') {
-            out[j++]='\\\\'; out[j++]='n';
+            out[j++]='\\'; out[j++]='n';
         } else if(c=='\r') {
-            out[j++]='\\\\'; out[j++]='r';
+            out[j++]='\\'; out[j++]='r';
         } else if(c=='\t') {
-            out[j++]='\\\\'; out[j++]='t';
+            out[j++]='\\'; out[j++]='t';
         } else if(c<32) {
             out[j++]='?';
         } else {
